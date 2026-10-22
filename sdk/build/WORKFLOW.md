@@ -151,6 +151,8 @@ Cloud SDK 依赖刚发布的 AIP release line；Runtime 最后发布，使 agent
 
 发布凭据只存在于开源 release 仓库的 ignored 文件中：`.npmrc`、`.pypirc`。不要把 token 写入脚本、artifact 或 migration 文档。
 
+PyPI 发布时，脚本将 `.pypirc` 路径显式传给 `twine upload --config-file`，不依赖 Twine 不支持的 `TWINE_CONFIG_FILE` 自动读取。正常发布不要另设 `TWINE_REPOSITORY_URL`：当前 Twine 会用 URL 配置替代命名仓库配置，从而忽略该仓库中的凭据。
+
 ## 发布前检查
 
 ```bash

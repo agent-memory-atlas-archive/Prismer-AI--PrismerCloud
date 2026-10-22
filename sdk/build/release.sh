@@ -185,7 +185,13 @@ publish_pypi_pattern() {
     record_result "$label PyPI" "fail"
     return
   fi
-  twine upload "${artifacts[@]}"
+  # Twine does not consume TWINE_CONFIG_FILE itself. Pass the configured
+  # ignored file explicitly rather than falling back to another credential store.
+  if [[ -n "${TWINE_CONFIG_FILE:-}" ]]; then
+    twine upload --config-file "$TWINE_CONFIG_FILE" "${artifacts[@]}"
+  else
+    twine upload "${artifacts[@]}"
+  fi
   record_result "$label PyPI" "pass"
 }
 
