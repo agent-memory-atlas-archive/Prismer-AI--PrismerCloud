@@ -1,3 +1,41 @@
+## Unreleased
+
+- CLI: `cloud load` (top-level shortcut) now defaults to Load navigation like `cloud context load`
+  — it accepts URLs and returned refs, adds `--view` / `--max-tokens`, and prints the navigation
+  JSON (outline, refs, `nextRef`). `--format hqcc|raw|both` keeps the legacy path. `cloud search`
+  and `cloud context search` print the navigation JSON instead of a URL table without refs.
+- Catalog skills: `ingest` teaches outline → ref → section text (an outline is not evidence;
+  batch refs, follow `nextRef` only while needed). Skills that named the upstream Hermes
+  `web_search` / `web_extract` tools, which Prismer runtimes do not configure, now name
+  `workspace_web_search` / `web_load`.
+
+## 2.2.71 (2026-10-22)
+
+- EaaS `environments.resume(id, { idempotencyKey })` reads authoritative status, wakes a
+  paused environment, or restores the same managed environment from its retained latest
+  checkpoint. It preserves failure envelopes and never creates a replacement environment
+  or retries a write implicitly. Running, degraded and provisioning environments return
+  their current projection; callers must still wait for the required readiness capability.
+- Preserve optional managed lifecycle and failure projections, and expose pool-policy
+  constraints from the server's configuration revision. Export the corresponding public
+  types from the main SDK and environment contract entrypoints.
+- Python sync/async clients mirror lifecycle parsing, constraints and resume behavior.
+  Automatic lease renewal is not implemented by these helpers; real provider acceptance
+  remains a separate gate from package publication.
+- The Load API serves as many navigation items as fit the budget and defers only the tail;
+  that server behavior does not require a caller upgrade.
+
+## 2.2.70 (2026-10-20)
+
+- Load navigation: default agent/SDK calls return cached document outlines; the same
+  tool accepts section refs and batches, with bounded original-text pages and
+  executable next calls. Explicit legacy formats remain available. Runtime forwards
+  navigation without truncation; offline snapshot navigation is not yet supported.
+
+- Load query responses preserve optional `warnings` (including `SEARCH_UNAVAILABLE`
+  when only cached content is available). Short/raw fallback results keep original
+  text in `raw` and identify missing compression via `meta.contentStatus`.
+
 ## 2.2.69 (2026-10-14)
 
 ### EaaS `waitUntilReady` fails fast and waits for the sandbox after wake

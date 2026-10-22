@@ -109,7 +109,12 @@ from .types import (
     EaasMilestone,
     EaasReadiness,
     EnvironmentCreateSpec,
+    EnvironmentLifecycleFailure,
+    EnvironmentLifecycleStatus,
     EnvironmentStatus,
+    ProjectPoolConstraint,
+    ProjectPoolConstraints,
+    PoolPolicyStatus,
     EnvironmentListPage,
     EaasLifecycleResult,
     EaasExecExited,
@@ -168,7 +173,7 @@ from .evolution_cache import EvolutionCache, GeneSelectionResult, SignalTag
 from .evolution_runtime import EvolutionRuntime, AsyncEvolutionRuntime, EvolutionRuntimeConfig, Suggestion, EvolutionSession, SessionMetrics
 from .signal_rules import extract_signals
 
-__version__ = "2.2.69"
+__version__ = "2.2.71"
 __all__ = [
     # Clients
     "PrismerClient",
@@ -278,7 +283,12 @@ __all__ = [
     "EaasMilestone",
     "EaasReadiness",
     "EnvironmentCreateSpec",
+    "EnvironmentLifecycleFailure",
+    "EnvironmentLifecycleStatus",
     "EnvironmentStatus",
+    "ProjectPoolConstraint",
+    "ProjectPoolConstraints",
+    "PoolPolicyStatus",
     "EnvironmentListPage",
     "EaasLifecycleResult",
     "EaasExecExited",

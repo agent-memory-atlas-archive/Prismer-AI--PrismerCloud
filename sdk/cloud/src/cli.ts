@@ -929,19 +929,22 @@ program
 // cloud load <url...>
 program
   .command('load')
-  .description('Load URL(s) → compressed HQCC (shortcut for: context load)')
-  .argument('<urls...>', 'One or more URLs')
-  .option('-f, --format <fmt>', 'Return format: hqcc, raw, both', 'hqcc')
+  .description('Load URL(s) or returned refs → outline / section text (shortcut for: context load)')
+  .argument('<urls...>', 'URLs and/or refs returned by a previous load')
+  .option('-f, --format <fmt>', 'Legacy return format: hqcc, raw, both')
+  .option('--view <view>', 'navigate, outline, or content', 'navigate')
+  .option('--max-tokens <n>', 'Total navigation budget', '4000')
   .option('--json', 'JSON output')
   .action(async (urls: string[], opts: any) => {
     const client = getAPIClient();
     const input = urls.length === 1 ? urls[0] : urls;
-    const loadOpts: Record<string, any> = {};
-    if (opts.format) loadOpts.return = { format: opts.format };
-    const res = await withSpinner(`Loading ${urls.length} URL(s)`, async () => {
+    const loadOpts: Record<string, any> = opts.format
+      ? { return: { format: opts.format } }
+      : { view: opts.view, budget: { maxTokens: Number(opts.maxTokens) } };
+    const res = await withSpinner(`Loading ${urls.length} input(s)`, async () => {
       return client.load(input as any, loadOpts);
     });
-    if (opts.json) { console.log(JSON.stringify(res, null, 2)); return; }
+    if (opts.json || res.mode === 'navigate') { console.log(JSON.stringify(res, null, 2)); return; }
     if (!res.success) { uiError(res.error?.message || 'Load failed'); process.exit(1); }
     const results = res.results || (res.result ? [res.result] : []);
     for (const r of results) {
@@ -967,7 +970,7 @@ program
     const res = await withSpinner(`Searching: ${query}`, async () => {
       return client.search(query, { topK: parseInt(opts.topK || '5') });
     });
-    if (opts.json) { console.log(JSON.stringify(res, null, 2)); return; }
+    if (opts.json || res.mode === 'navigate') { console.log(JSON.stringify(res, null, 2)); return; }
     if (!res.success) { uiError(res.error?.message || 'Search failed'); process.exit(1); }
     const results = res.results || [];
     if (results.length === 0) { uiWarn('No results.'); return; }

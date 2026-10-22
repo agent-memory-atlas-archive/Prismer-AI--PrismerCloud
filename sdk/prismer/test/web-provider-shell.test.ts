@@ -104,6 +104,20 @@ print(json.dumps([s["name"] for s in schemas]))
     );
   });
 
+  it('web tool descriptions match Load navigation: outlines with refs, not page content', () => {
+    const r = runPy(`${BOOTSTRAP}
+schemas = {s["name"]: s["description"] for s in p.get_tool_schemas()}
+print(json.dumps({"search": schemas["workspace_web_search"], "load": schemas["web_load"]}))
+`);
+    expect(r.status, r.stderr).toBe(0);
+    const d = JSON.parse(r.stdout.trim().split('\n').pop()!) as { search: string; load: string };
+    expect(d.search).not.toContain('compressed page content');
+    expect(d.search).toContain('outlines with refs');
+    expect(d.search).toContain('web_load');
+    expect(d.load).toContain('an outline is not evidence');
+    expect(d.load).toContain('nextRef');
+  });
+
   it('pkf_mint_sids is workspace-independent and forwards only a bounded count', () => {
     const r = runPy(`${BOOTSTRAP}
 calls = []

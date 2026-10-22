@@ -460,6 +460,7 @@ export const MEMORY_CORE_DIRECTIVE = [
 export const WEB_TOOL_DIRECTIVE = [
   '## Tool routing (web + CLI)',
   'Web research → use `workspace_web_search` (search) / `web_load` (load a URL, or a `prismer://asset/…` / `prismer://…/file/…` workspace pointer — the way to read an asset a memory page points at) — workspace-billed, cached. CLI commands → use `terminal`. Do NOT script HTTP requests or subprocess calls via `execute_code` for these.',
+  'Web pages come back as outlines with refs, not page text — an outline is not evidence. Read the sections you need by passing their refs to `web_load` as `input` (up to 5 per call); follow `nextRef` only while you still need more, stop once the text you read answers the question, and answer from the returned `content`.',
   'Workspace documents arrive as `prismer://asset/…` pointers — READ them with `web_load`, every time. Never substitute terminal grep/cat/find over the filesystem for a pointer you were given: it is slower, off-workspace, and misses the authoritative bytes.',
 ].join('\n');
 

@@ -129,7 +129,8 @@ Two skills, clean split by **source location**:
   Office files already on the machine → Markdown / JSON / screenshots,
   fully offline. This is the only local document-parsing path.
 - **`ingest` (sibling skill)** — **web URLs and search.** `cloud load` /
-  `cloud search` fetch and compress remote pages. `liteparse` cannot
+  `cloud search` (or `web_load` / `workspace_web_search`) fetch remote pages and
+  read them section by section. `liteparse` cannot
   fetch URLs; if you only have a URL, either `curl -sL <url> -o file`
   then parse the local copy with `liteparse`, or route to `ingest`.
 

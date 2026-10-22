@@ -5,15 +5,17 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 export function registerContextLoad(server: McpServer) {
   server.tool(
     'prismer.context.load',
-    'Fetch, understand, and compress any URL or search query into LLM-ready context. Global cache: if any agent already processed the same URL, you get it instantly for free.',
+    'Search or load a URL to get an outline. Call this same tool again with returned refs to read original sections from cache. Pass an array for batch expansion. Follow nextRef only when more evidence is needed; an outline is not the full document.',
     {
       input: z
-        .string()
-        .describe('URL, multiple URLs (newline-separated), or a search query'),
+        .union([z.string(), z.array(z.string()).min(1).max(20)])
+        .describe('URL, search query, returned ref, or array of URLs/refs'),
+      view: z.enum(['navigate', 'outline', 'content']).optional(),
+      maxTokens: z.number().int().min(512).max(16000).optional(),
       format: z
         .enum(['hqcc', 'raw', 'both'])
         .optional()
-        .describe('Output format. hqcc = compressed (default), raw = original, both = both'),
+        .describe('Output format. hqcc = legacy compressed, raw = original, both = both'),
       maxResults: z
         .number()
         .optional()
@@ -23,9 +25,11 @@ export function registerContextLoad(server: McpServer) {
         .optional()
         .describe('Ranking preset for search results (default: cache_first)'),
     },
-    async ({ input, format, maxResults, ranking }) => {
+    async ({ input, format, maxResults, ranking, view, maxTokens }) => {
       try {
         const body: Record<string, unknown> = { input };
+        if (!format || view) body.view = view || 'navigate';
+        if (maxTokens) body.budget = { maxTokens };
         if (format) body['return'] = { format };
         if (maxResults) body['return'] = { ...(body['return'] as object || {}), topK: maxResults };
         if (ranking) body.ranking = { preset: ranking };
@@ -41,6 +45,12 @@ export function registerContextLoad(server: McpServer) {
         }
 
         const data = result as Record<string, unknown>;
+        if (data.mode === 'navigate') {
+          const calls = (data.next_calls as Array<Record<string, any>> || []).map(call => ({
+            tool: 'prismer.context.load', arguments: { input: call.input, view: call.view, maxTokens: call.budget?.maxTokens },
+          }));
+          return {content:[{type:'text' as const,text:JSON.stringify({...data,next_calls:calls})}]};
+        }
         let text = '';
 
         // Single URL result

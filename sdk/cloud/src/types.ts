@@ -77,6 +77,9 @@ export interface CommunityHubConfig {
 // ============================================================================
 
 export interface LoadOptions {
+  /** Progressive navigation; refs reuse immutable cached source snapshots. */
+  view?: 'navigate' | 'outline' | 'content';
+  budget?: { maxTokens?: number };
   inputType?: 'auto' | 'url' | 'urls' | 'query';
   processUncached?: boolean;
   search?: { topK?: number };
@@ -96,16 +99,26 @@ export interface RankingFactors {
 }
 
 export interface LoadResultItem {
+  status?: 'ok' | 'error' | 'deferred';
+  ref?: string;
+  nextRef?: string;
+  contentRef?: string;
+  outlineRef?: string;
+  content?: string;
+  contentComplete?: boolean;
+  outlineComplete?: boolean;
+  outline?: Array<{title: string; ref: string; hasChildren: boolean; estimatedTokens: number}>;
+  source?: Record<string, unknown>;
   rank?: number;
-  url: string;
+  url?: string;
   title?: string;
   hqcc?: string | null;
   raw?: string;
-  cached: boolean;
+  cached?: boolean;
   cachedAt?: string;
   processed?: boolean;
   found?: boolean;
-  error?: string;
+  error?: string | {code: string; message?: string};
   ranking?: { score: number; factors: RankingFactors };
   meta?: Record<string, any>;
 }
@@ -118,15 +131,21 @@ export interface BatchSummary { total: number; found: number; notFound: number; 
 export interface QuerySummary { query: string; searched: number; cacheHits: number; compressed: number; returned: number }
 
 export interface LoadResult {
+  guidance?: string;
+  next_calls?: Array<{input: string[]; view: string; budget: {maxTokens: number}}>;
+  usage?: Record<string, number>;
+  budget?: Record<string, unknown>;
   success: boolean;
   requestId?: string;
-  mode?: 'single_url' | 'batch_urls' | 'query';
+  mode?: 'single_url' | 'batch_urls' | 'query' | 'navigate';
   result?: LoadResultItem;
   results?: LoadResultItem[];
-  summary?: BatchSummary | QuerySummary;
+  summary?: BatchSummary | QuerySummary | {returned: number; ready: number; errors: number};
   cost?: SingleUrlCost | BatchUrlCost | QueryCost;
   processingTime?: number;
   error?: { code: string; message: string };
+  /** Non-fatal query degradation; cached results may still be usable. */
+  warnings?: Array<{ code: string; message: string }>;
 }
 
 export interface SaveOptions {

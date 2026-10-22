@@ -100,6 +100,21 @@ describe('mapHermesToolDetail — Hermes tool args → ToolCallDetail', () => {
     });
   });
 
+  it('web_load navigation input (URL, ref or batch) and urls[] → fetch{url}', () => {
+    expect(mapHermesToolDetail('web_load', { input: 'https://docs.python.org/3/' })).toEqual({
+      type: 'fetch',
+      url: 'https://docs.python.org/3/',
+    });
+    expect(mapHermesToolDetail('web_load', { input: ['prismer://load/a/n1', 'prismer://load/a/n2'] })).toEqual({
+      type: 'fetch',
+      url: 'prismer://load/a/n1\nprismer://load/a/n2',
+    });
+    expect(mapHermesToolDetail('web_load', { urls: ['https://a.dev', 'https://b.dev'] })).toEqual({
+      type: 'fetch',
+      url: 'https://a.dev\nhttps://b.dev',
+    });
+  });
+
   it('parses a JSON-string args payload', () => {
     expect(mapHermesToolDetail('execute_code', '{"code":"echo z"}')).toEqual({
       type: 'shell',

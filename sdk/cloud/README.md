@@ -136,6 +136,36 @@ Use the [standalone single-key example](examples/eaas-single-key.mjs) for an act
 
 The installed TypeScript SDK passed real ACS test critical-feature journeys on 2026-10-09: full WS/SSE/REST event equality, delegated access/revocation, HITL question decisions, memory grant/revoke, skill resource use, artifacts and budget continuity across key rotation. See [scope and receipts](../../docs/organization/specs/10-eaas-critical-feature-regression-20261009.md). Wait for the actual question message after a run parks; status and message delivery are separate writes. Never put the project key in browser code.
 
+### Resume a managed environment
+
+The following helper is included in the **2.2.71 release line**. Registry publication, installed-package validation and deployed provider acceptance are separate release gates; check release receipts before relying on a published version or provider behavior.
+
+```typescript
+import { PrismerClient } from '@prismer/sdk';
+
+const client = new PrismerClient({
+  apiKey: process.env.PRISMER_API_KEY!,
+  baseUrl: process.env.PRISMER_BASE_URL!,
+});
+const environmentId = process.env.PRISMER_ENVIRONMENT_ID!;
+// Persist and reuse this key when retrying the same intended resume operation.
+const resumed = await client.environments.resume(environmentId, {
+  idempotencyKey: process.env.PRISMER_RESUME_KEY!,
+});
+if (!resumed.success) throw new Error(`${resumed.error.code}: ${resumed.error.message}`);
+// A successful admission (including operationId) does not prove provider readiness.
+const ready = await client.environments.waitUntilReady(environmentId, { capability: 'sandbox' });
+console.log(ready.environmentId, ready.lifecycle);
+```
+
+`resume()` reads the current status first. Paused environments use `wake`; stopped managed environments use only the server's `lifecycle.latestSnapshotId` when `recoverable` is true. Recovery requires a live retention window and a retained checkpoint; legacy stopped environments, expired retention and missing checkpoints return `state_conflict` with `details.reason = checkpoint_unavailable`. The server revalidates retention when restore is admitted. Running, degraded and provisioning environments return their current ID, state, epoch and revision with `operationId: null`; use `waitUntilReady` for the capability you need. GET failures and delegated operation failures retain their error details, request ID and Retry-After hint. The helper does not retry writes.
+
+`EnvironmentStatus.lifecycle` is optional for legacy responses. Its managed projection includes lease/retention deadlines, recoverability, latest snapshot and `lastFailure` (code/message/time plus optional operation ID, attempt and terminal flag). `EnvironmentLifecycleStatus` and `EnvironmentLifecycleFailure` are exported from both `@prismer/sdk` and `@prismer/sdk/environment-contract`.
+
+`client.projects.poolPolicy.get(projectId)` may return optional `constraints` (`ProjectPoolConstraints` / `ProjectPoolConstraint`) from the same `configRevision`: the shared ceiling and each granted pool's mode, ceiling, enablement, allowed miss behavior and compatible fallback IDs. Treat absent constraints as unavailable edit authority; maxReady alone is not a keep-ready target or proof of warm inventory.
+
+Managed Phase A saves/reclaims/restores the environment under its server policy. Explicit/automatic lease renewal remains Phase B; `resume` installs no keepalive or local renewal timer.
+
 ## Constructor
 
 ```typescript

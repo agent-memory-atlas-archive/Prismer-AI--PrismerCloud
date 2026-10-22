@@ -321,9 +321,10 @@ _WEB_SEARCH_SCHEMA = {
     "name": "workspace_web_search",
     "description": (
         "Search the web through the workspace cloud (cached, billed to your "
-        "workspace). Returns ranked results with compressed page content. Use "
-        "this for ANY web research instead of scripting HTTP calls with "
-        "execute_code/subprocess."
+        "workspace). Returns the top results as document outlines with refs, "
+        "not page text; read the sections you need by passing their refs to "
+        "web_load. Use this for ANY web research instead of scripting HTTP "
+        "calls with execute_code/subprocess."
     ),
     "parameters": {
         "type": "object",
@@ -346,7 +347,7 @@ _WEB_LOAD_SCHEMA = {
     "description": (
         "Load web pages OR workspace assets/files (prismer://asset/… URIs) "
         "through the workspace cloud (cached, billed to your workspace). "
-        "Returns compressed content. Use this to read a specific URL instead "
+        "A web URL returns a cached document outline with refs — an outline is not evidence. Pass returned refs through input to read the original section text; arrays batch-read refs (max 5). Follow nextRef only while you need more. Use this to read a specific URL instead "
         "of scripting HTTP calls with execute_code/subprocess — and use it "
         "instead of re-reading raw sources when memory already references "
         "them by a prismer:// pointer. Accepts http(s) and prismer:// URIs."
@@ -354,6 +355,7 @@ _WEB_LOAD_SCHEMA = {
     "parameters": {
         "type": "object",
         "properties": {
+            "input": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}, "maxItems": 5}], "description": "Search query, URL, returned Load ref, or ref batch. Use the same tool for discovery and expansion."},
             "url": {"type": "string", "description": "Single http(s) or prismer:// URI to load."},
             "urls": {
                 "type": "array",
@@ -1032,6 +1034,11 @@ class PrismerMemoryProvider(MemoryProvider):
                 )
             return json.dumps(payload or {"ok": True, "results": []})
         if tool_name == "web_load":
+            if "input" in args:
+                result = _http_post_with_status("/local/web/load", {"input": args["input"]}, _WEB_TIMEOUT)
+                payload = result.get("body")
+                return json.dumps(payload if isinstance(payload, dict) else {"ok": False, "error": "web_load_failed"})
+
             # Workspace web page load (NOT a memory op) — same daemon lane as
             # web_search. Scheme allowlist http(s) | prismer:// (memory203/20
             # §2.2 / 19 B9: memory pages point at assets/files by prismer://

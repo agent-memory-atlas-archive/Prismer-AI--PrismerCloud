@@ -135,6 +135,71 @@ describe('web tools RPC (/local/web/*)', () => {
     expect(cloudCalls).toHaveLength(0);
   });
 
+  it('same web_load entry supports initial query and cached refs', async () => {
+    const ref='prismer://load/'+ 'a'.repeat(64) + '/n1';
+    await post(baseUrl,'/local/web/load',{input:'Python asyncio'});
+    expect(cloudCalls[0].body).toMatchObject({input:'Python asyncio',view:'navigate'});
+    await post(baseUrl,'/local/web/load',{input:[ref]});
+    expect(cloudCalls[1].body).toMatchObject({input:ref,view:'navigate'});
+  });
+
+  it('a string that carries Load refs, or only URLs, is loaded and never searched', async () => {
+    // Live 2026-10-20 (local kind, Hermes + DeepSeek): the model followed an outline ref with
+    // web_load {"input": "[\\"prismer://load/<id>/n1\\"]"}. Any input that did not start with a
+    // URL scheme was searched as a query, so the agent got unrelated outlines and no error.
+    const r1 = 'prismer://load/' + 'a'.repeat(64) + '/n1';
+    const r2 = 'prismer://load/' + 'a'.repeat(64) + '/n2?view=content&offset=3586';
+    const cases: Array<[string, string | string[]]> = [
+      [JSON.stringify([r1]), r1],
+      [` ${JSON.stringify([r1, r2])} `, [r1, r2]],
+      [JSON.stringify(r1), r1],
+      ['`' + r1 + '`', r1],
+      [`${r1}, ${r2}`, [r1, r2]],
+      [`${r1}\n${r2}`, [r1, r2]],
+      [`${r1}.`, r1],
+      [`Read ${r1} next`, r1],
+      ['"https://a.com/x"', 'https://a.com/x'],
+      ['<https://a.com/x>', 'https://a.com/x'],
+    ];
+    for (const [input, expected] of cases) {
+      cloudCalls = [];
+      await post(baseUrl, '/local/web/load', { input });
+      expect(cloudCalls[0]?.body, input).toMatchObject({ input: expected, view: 'navigate' });
+      expect(cloudCalls[0]?.body.inputType, input).toBeUndefined();
+    }
+    // Plain queries — bracketed text, or a URL among other words — are still searched.
+    for (const query of ['Python asyncio', '[PEP 654] exception groups', 'compare https://a.com/x with the spec']) {
+      cloudCalls = [];
+      await post(baseUrl, '/local/web/load', { input: query });
+      expect(cloudCalls[0]?.body, query).toMatchObject({ input: query, inputType: 'query' });
+    }
+  });
+
+  it('array input is never searched: wrapped items are unwrapped, other items are rejected', async () => {
+    const r1 = 'prismer://load/' + 'a'.repeat(64) + '/n1';
+    await post(baseUrl, '/local/web/load', { input: ['`' + r1 + '`', JSON.stringify('https://a.com/x')] });
+    expect(cloudCalls[0]?.body).toMatchObject({ input: [r1, 'https://a.com/x'], view: 'navigate' });
+    const rejected = await post(baseUrl, '/local/web/load', { input: ['Python asyncio'] });
+    expect(rejected.status).toBe(400);
+    expect(cloudCalls).toHaveLength(1);
+  });
+
+  it('navigation budget scales with the requested item count so every item gets a page', async () => {
+    // Cloud Load splits maxTokens*3 bytes (minus a ~1400-byte envelope) across the items and
+    // defers items below 1200 bytes. A fixed 2000-token budget left 920 bytes per item for
+    // topK 5 or a 5-ref batch, so the first hop came back with no outline at all.
+    const share = (maxTokens: number, items: number) => Math.floor((maxTokens * 3 - 1400) / items);
+    const refs = ['0', '1', '2', '3', '4'].map((d) => 'prismer://load/' + d.repeat(64) + '/root');
+    await post(baseUrl, '/local/web/load', { input: 'Python asyncio' });
+    await post(baseUrl, '/local/web/search', { query: 'Python asyncio', limit: 10 });
+    await post(baseUrl, '/local/web/load', { input: refs[0] });
+    await post(baseUrl, '/local/web/load', { input: refs });
+    expect(share(cloudCalls[0].body.budget.maxTokens, 5)).toBeGreaterThanOrEqual(2400);
+    expect(share(cloudCalls[1].body.budget.maxTokens, 10)).toBeGreaterThanOrEqual(2400);
+    expect(cloudCalls[2].body.budget.maxTokens).toBe(2000);
+    expect(share(cloudCalls[3].body.budget.maxTokens, 5)).toBeGreaterThanOrEqual(2400);
+    for (const call of cloudCalls) expect(call.body.budget.maxTokens).toBeLessThanOrEqual(16000);
+  });
   it('load forwards a single url as { input: url } and a batch as { input: urls[] }', async () => {
     cloudResponse = () =>
       new Response(JSON.stringify({ success: true, mode: 'single_url', result: { url: 'https://a.com', hqcc: 'ok' } }), {
@@ -217,6 +282,14 @@ describe('web tools RPC (/local/web/*)', () => {
 });
 
 describe('boundLoadApiPayload', () => {
+  it('preserves bounded navigation pages and converts next calls for the same web_load tool', () => {
+    const ref = 'prismer://load/' + 'a'.repeat(64) + '/n1';
+    const out = boundLoadApiPayload({mode:'navigate',guidance:'Read refs',results:[{ref,content:'x'.repeat(9000),nextRef:ref+'?view=content&offset=9000'}],next_calls:[{input:[ref],view:'content',budget:{maxTokens:4000}}]}) as any;
+    expect(out.results[0].content).toHaveLength(9000);
+    expect(out.results[0].contentTruncated).toBeUndefined();
+    expect(out.next_calls[0].tool).toBe('web_load');
+    expect(out.next_calls[0].arguments.input[0]).toContain('view=content');
+  });
   it('bounds result (single) and results (batch/query) text fields, leaves short fields alone', () => {
     const huge = 'y'.repeat(WEB_TEXT_FIELD_MAX * 2);
     const out = boundLoadApiPayload({

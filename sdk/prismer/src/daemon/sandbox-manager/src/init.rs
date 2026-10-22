@@ -61,6 +61,16 @@ pub fn resolve_daemon_id_for_boot(config_path: &Path, preserve_existing: bool) -
     initial_id
 }
 
+/// A neutral carrier clone still runs in template mode, but an explicit
+/// identity from its new Pod must replace the checkpoint source identity.
+pub fn restoring_template(
+    has_marker: bool,
+    template_mode: bool,
+    explicit_id: Option<&str>,
+) -> bool {
+    has_marker && (!template_mode || explicit_id.map(|id| !id.trim().is_empty()).unwrap_or(false))
+}
+
 pub fn runtime_template_mode() -> bool {
     env::var("PRISMER_TEMPLATE_MODE")
         .map(|value| value == "true")
@@ -153,6 +163,18 @@ pub fn read_existing_daemon_id(config_path: &Path) -> Result<String, ()> {
     Err(())
 }
 
+/// Dev-only stand-in for a missing credential.
+///
+/// CONTRACT: this value must NOT look like a cloud-minted credential
+/// (`sk-prismer-live-*`). The daemon classifies a container as keyless by that
+/// prefix (`containerEnvIsKeyless`): a fake key wearing the real shape makes
+/// the daemon believe it holds a credential, so it authenticates instead of
+/// waiting for the cloud's credential-less ACS handshake, the cloud refuses
+/// it, `/healthz.declareBlocked` never clears, and every `waitDaemon` caller
+/// times out — which is what failed every EaaS checkpoint restore on
+/// 2026-10-15 (`AUTH_PENDING / Invalid token`, 222 retries, `provider_timeout`).
+pub const DEV_FAKE_API_KEY: &str = "dev-cookbook-fake-key";
+
 /// Resolve API key with fake key fallback for dev images.
 /// Mirrors daemon-entrypoint.sh:46-55.
 pub fn resolve_api_key() -> String {
@@ -167,7 +189,7 @@ pub fn resolve_api_key() -> String {
         eprintln!(
             "[sandbox-manager] PRISMER_API_KEY missing — using dev fake key (PRISMER_ALLOW_FAKE_API_KEY=true)"
         );
-        return "sk-prismer-live-dev-cookbook-fake-key".to_string();
+        return DEV_FAKE_API_KEY.to_string();
     }
 
     eprintln!("[sandbox-manager] PRISMER_API_KEY: missing — controller must inject");
@@ -526,6 +548,21 @@ mod tests {
     use std::fs;
 
     #[test]
+    fn neutral_clone_resets_source_identity_but_ordinary_boot_preserves_it() {
+        assert!(restoring_template(true, true, Some("container:new-pod")));
+        assert!(restoring_template(true, false, None));
+        assert!(restoring_template(true, false, Some("container:new-pod")));
+        assert!(!restoring_template(true, true, None));
+        assert!(!restoring_template(true, true, Some("")));
+        assert!(!restoring_template(false, true, Some("container:new-pod")));
+        assert!(!restoring_template(
+            false,
+            false,
+            Some("container:existing")
+        ));
+    }
+
+    #[test]
     fn test_resolve_daemon_home_dir() {
         let home = resolve_daemon_home_dir();
         assert_eq!(home, PathBuf::from("/home/user"));
@@ -567,6 +604,21 @@ mod tests {
     #[test]
     #[ignore = "env-dependent: needs isolated PRISMER_API_KEY; verified by container-level tests (case 1/5/7)"]
     fn test_resolve_api_key_returns_key_when_set() {}
+
+    /// The daemon treats `sk-prismer-live-*` as a real credential
+    /// (`containerEnvIsKeyless`). The dev fallback must stay outside that
+    /// shape or every keyless container authenticates instead of waiting for
+    /// the ACS handshake (observed live 2026-10-15: restores stuck in
+    /// declareBlocked/AUTH_PENDING until their waitDaemon window expired).
+    #[test]
+    fn dev_fake_key_is_not_shaped_like_a_live_credential() {
+        assert!(
+            !DEV_FAKE_API_KEY.starts_with("sk-prismer-live-"),
+            "dev fallback must stay keyless-classified, got {}",
+            DEV_FAKE_API_KEY
+        );
+        assert!(!DEV_FAKE_API_KEY.is_empty());
+    }
 
     #[test]
     fn test_resolve_cloud_base_returns_default() {

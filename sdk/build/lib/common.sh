@@ -12,7 +12,7 @@ CLOUD_SDK="$SDK_ROOT/cloud"
 PRISMER_RUNTIME="$SDK_ROOT/prismer"
 LEGACY_SDK_ROOT="$SDK_ROOT/prismer-cloud"
 AIP_SDK="$SDK_ROOT/aip"
-OPENSRC_ROOT="${OPENSRC_ROOT:-/Users/prismer/workspace/PrismerCloud}"
+OPENSRC_ROOT="${OPENSRC_ROOT:-$HOME/workspace/opensource/PrismerCloud}"
 OPENSRC_SDK="$OPENSRC_ROOT/sdk"
 ARTIFACTS_DIR="$BUILD_ROOT/artifacts"
 

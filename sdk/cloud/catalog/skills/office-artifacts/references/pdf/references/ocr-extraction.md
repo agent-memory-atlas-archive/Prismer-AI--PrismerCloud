@@ -12,16 +12,17 @@ This skill covers **text extraction from PDFs and scanned documents**.
 
 ## Step 1: Remote URL Available?
 
-If the document has a URL, **always try `web_extract` first**:
+If the document has a URL, **always try `web_load` first**:
 
 ```
-web_extract(urls=["https://arxiv.org/pdf/2402.03300"])
-web_extract(urls=["https://example.com/report.pdf"])
+web_load(input="https://arxiv.org/pdf/2402.03300")
+web_load(input="https://example.com/report.pdf")
 ```
 
-This handles PDF-to-markdown conversion via Firecrawl with no local dependencies.
+The first call returns the document outline with refs; read the sections you need with
+`web_load(input=["<ref>", ...])` (see the `ingest` skill). No local dependencies.
 
-Only use local extraction when: the file is local, web_extract fails, or you need batch processing.
+Only use local extraction when: the file is local, web_load fails, or you need batch processing.
 
 ## Step 2: Choose Local Extractor
 
@@ -107,13 +108,13 @@ marker /path/to/folder --workers 4    # Batch
 
 ```
 # Abstract only (fast)
-web_extract(urls=["https://arxiv.org/abs/2402.03300"])
+web_load(input="https://arxiv.org/abs/2402.03300")
 
-# Full paper
-web_extract(urls=["https://arxiv.org/pdf/2402.03300"])
+# Full paper: outline first, then the section refs you need
+web_load(input="https://arxiv.org/pdf/2402.03300")
 
 # Search
-web_search(query="arxiv GRPO reinforcement learning 2026")
+workspace_web_search(query="arxiv GRPO reinforcement learning 2026")
 ```
 
 ## Split, Merge & Search
@@ -156,7 +157,7 @@ No extra dependencies needed — pymupdf covers split, merge, search, and text e
 
 ## Notes
 
-- `web_extract` is always first choice for URLs
+- `web_load` is always first choice for URLs
 - pymupdf is the safe default — instant, no models, works everywhere
 - marker-pdf is for OCR, scanned docs, equations, complex layouts — install only when needed
 - Both helper scripts accept `--help` for full usage

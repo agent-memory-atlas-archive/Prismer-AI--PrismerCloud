@@ -115,6 +115,8 @@ npx tsx scripts/check-version-consistency.ts
 
 ## 同步与发布
 
+同步前核对 `OPENSRC_ROOT` 指向公开 `Prismer-AI/PrismerCloud` 仓库的根目录。脚本会在任何删除前校验 Git 根目录和 origin，拒绝闭源仓库、非 Git 目录和仓库子目录。已有未提交工作时先使用独立发布工作树，并显式传入 `OPENSRC_ROOT`；不要覆盖原工作目录。凭据继续通过原公开仓库的 ignored 配置使用，不复制进产物。
+
 ```bash
 # 闭源仓库：同步整个 sdk/ 到开源 release 仓库
 sdk/build/sync.sh --yes

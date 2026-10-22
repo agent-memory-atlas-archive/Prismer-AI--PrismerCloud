@@ -42,6 +42,13 @@ function str(v: unknown): string | undefined {
   return undefined;
 }
 
+/** A string, or a string array joined one item per line; else undefined. */
+function strList(v: unknown): string | undefined {
+  if (!Array.isArray(v)) return str(v);
+  const items = v.map(str).filter((s): s is string => s !== undefined);
+  return items.length ? items.join('\n') : undefined;
+}
+
 /** Coerce to a finite number, else undefined. */
 function num(v: unknown): number | undefined {
   if (typeof v === 'number' && Number.isFinite(v)) return v;
@@ -319,7 +326,9 @@ export function mapHermesToolDetail(
   }
 
   if (FETCH_TOOLS.has(name)) {
-    const url = pick(args, 'url', 'uri', 'link', 'address');
+    // web_load navigation passes a URL, query or ref — or a batch of them — as
+    // `input`; its legacy batch form is `urls`.
+    const url = pick(args, 'url', 'uri', 'link', 'address') ?? strList(args.input) ?? strList(args.urls);
     if (!url) return undefined;
     return {
       type: 'fetch',

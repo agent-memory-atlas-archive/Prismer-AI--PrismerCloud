@@ -17,6 +17,28 @@ if [[ ! -d "$OPENSRC_ROOT" ]]; then
   exit 1
 fi
 
+# A stale local path must never turn whole-directory replacement into deletion
+# of the private server checkout or an arbitrary repository/subdirectory.
+release_root="$(git -C "$OPENSRC_ROOT" rev-parse --show-toplevel 2>/dev/null)" || {
+  log_error "Refusing SDK sync: target is not a Git release repository"
+  exit 1
+}
+if [[ "$(cd "$release_root" && pwd -P)" != "$(cd "$OPENSRC_ROOT" && pwd -P)" ]]; then
+  log_error "Refusing SDK sync: target must be the release repository root"
+  exit 1
+fi
+release_origin="$(git -C "$OPENSRC_ROOT" remote get-url origin 2>/dev/null)" || {
+  log_error "Refusing SDK sync: release repository has no origin"
+  exit 1
+}
+case "$release_origin" in
+  https://github.com/Prismer-AI/PrismerCloud|https://github.com/Prismer-AI/PrismerCloud.git|git@github.com:Prismer-AI/PrismerCloud.git|ssh://git@github.com/Prismer-AI/PrismerCloud.git) ;;
+  *)
+    log_error "Refusing SDK sync: target is not the reviewed public release repository"
+    exit 1
+    ;;
+esac
+
 VERSION="$(get_version)"
 log_info "Version: $VERSION"
 log_info "Source:  $SDK_ROOT"

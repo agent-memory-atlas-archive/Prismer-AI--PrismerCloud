@@ -1,5 +1,29 @@
 # prismer (Python SDK) -- Changelog
 
+## 2.2.71 (2026-10-22)
+
+- Sync and async `environments.resume(environment_id, idempotency_key=...)` use the current
+  server projection to wake a paused environment or restore the same managed environment
+  from its retained latest checkpoint. They preserve failure envelopes and do not create
+  replacement environments, retry writes implicitly or install renewal timers.
+- Preserve optional managed lifecycle, checkpoint recoverability and lifecycle failure
+  fields when parsing environment status. Mirror optional pool-policy constraints from the
+  server's configuration revision.
+- A successful resume admission does not prove provider readiness; call `wait_until_ready`
+  for the capability you need. Automatic lease renewal and real provider acceptance remain
+  separate from these package capabilities.
+
+## 2.2.70 (2026-10-20)
+
+- Load navigation: default agent/SDK calls return cached document outlines; the same
+  tool accepts section refs and batches, with bounded original-text pages and
+  executable next calls. Explicit legacy formats remain available. Runtime forwards
+  navigation without truncation; offline snapshot navigation is not yet supported.
+
+- Load query responses preserve optional `warnings` (including `SEARCH_UNAVAILABLE`
+  when only cached content is available). Short/raw fallback results keep original
+  text in `raw` and identify missing compression via `meta.contentStatus`.
+
 ## 2.2.69 (2026-10-14)
 
 ### EaaS `wait_until_ready` fails fast and waits for the sandbox after wake

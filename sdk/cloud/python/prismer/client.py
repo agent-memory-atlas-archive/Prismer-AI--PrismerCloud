@@ -5019,6 +5019,34 @@ class EnvironmentsClient:
     def get(self, environment_id: str) -> Dict[str, Any]:
         return self._request("GET", f"/api/v1/environments/{_url_quote(environment_id, safe='')}")
 
+    def resume(self, environment_id: str, *, idempotency_key: Optional[str] = None) -> Dict[str, Any]:
+        """Resume the same ID from server authority; then call ``wait_until_ready``.
+
+        Managed restore requires a live retained checkpoint. No snapshot search,
+        automatic write retry, or lease renewal is performed.
+        """
+        current = self.get(environment_id)
+        if not current["success"]:
+            return current
+        data = current["data"]
+        state = data["state"]
+        lifecycle = data.get("lifecycle") or {}
+        if state == "paused":
+            return self.wake(environment_id, idempotency_key=idempotency_key)
+        if (state == "stopped" and lifecycle.get("mode") == "managed"
+                and lifecycle.get("recoverable") is True and lifecycle.get("latestSnapshotId")):
+            return self.restore(environment_id, lifecycle["latestSnapshotId"], idempotency_key=idempotency_key)
+        if state in ("running", "degraded", "provisioning"):
+            return {"success": True, "data": {
+                "environmentId": data["environmentId"], "state": state,
+                "revision": data["revision"], "epoch": data["epoch"], "operationId": None,
+            }, "requestId": current.get("requestId", "")}
+        return {"success": False, "error": {
+            "code": "state_conflict",
+            "message": f"resume: environment is {state} without a recoverable checkpoint",
+            "details": {"reason": "checkpoint_unavailable", "environmentId": data["environmentId"], "state": state},
+        }, "requestId": current.get("requestId", "")}
+
     def list(self, *, cursor: Optional[str] = None, limit: Optional[int] = None) -> Dict[str, Any]:
         params: Dict[str, Any] = {}
         if cursor is not None:
@@ -5575,6 +5603,34 @@ class AsyncEnvironmentsClient:
 
     async def get(self, environment_id: str) -> Dict[str, Any]:
         return await self._request("GET", f"/api/v1/environments/{_url_quote(environment_id, safe='')}")
+
+    async def resume(self, environment_id: str, *, idempotency_key: Optional[str] = None) -> Dict[str, Any]:
+        """Resume the same ID from server authority; then await ``wait_until_ready``.
+
+        Managed restore requires a live retained checkpoint. No snapshot search,
+        automatic write retry, or lease renewal is performed.
+        """
+        current = await self.get(environment_id)
+        if not current["success"]:
+            return current
+        data = current["data"]
+        state = data["state"]
+        lifecycle = data.get("lifecycle") or {}
+        if state == "paused":
+            return await self.wake(environment_id, idempotency_key=idempotency_key)
+        if (state == "stopped" and lifecycle.get("mode") == "managed"
+                and lifecycle.get("recoverable") is True and lifecycle.get("latestSnapshotId")):
+            return await self.restore(environment_id, lifecycle["latestSnapshotId"], idempotency_key=idempotency_key)
+        if state in ("running", "degraded", "provisioning"):
+            return {"success": True, "data": {
+                "environmentId": data["environmentId"], "state": state,
+                "revision": data["revision"], "epoch": data["epoch"], "operationId": None,
+            }, "requestId": current.get("requestId", "")}
+        return {"success": False, "error": {
+            "code": "state_conflict",
+            "message": f"resume: environment is {state} without a recoverable checkpoint",
+            "details": {"reason": "checkpoint_unavailable", "environmentId": data["environmentId"], "state": state},
+        }, "requestId": current.get("requestId", "")}
 
     async def list(self, *, cursor: Optional[str] = None, limit: Optional[int] = None) -> Dict[str, Any]:
         params: Dict[str, Any] = {}
@@ -6303,6 +6359,8 @@ class PrismerClient:
         search: Optional[Dict[str, Any]] = None,
         processing: Optional[Dict[str, Any]] = None,
         return_config: Optional[Dict[str, Any]] = None,
+        view: Optional[str] = None,
+        budget: Optional[Dict[str, Any]] = None,
         ranking: Optional[Dict[str, Any]] = None,
     ) -> LoadResult:
         """Load content from URL(s) or search query."""
@@ -6315,6 +6373,10 @@ class PrismerClient:
             payload["search"] = search
         if processing:
             payload["processing"] = processing
+        if view or not (return_config or {}).get("format"):
+            payload["view"] = view or "navigate"
+        if budget:
+            payload["budget"] = budget
         if return_config:
             payload["return"] = return_config
         if ranking:
@@ -6685,6 +6747,8 @@ class AsyncPrismerClient:
         search: Optional[Dict[str, Any]] = None,
         processing: Optional[Dict[str, Any]] = None,
         return_config: Optional[Dict[str, Any]] = None,
+        view: Optional[str] = None,
+        budget: Optional[Dict[str, Any]] = None,
         ranking: Optional[Dict[str, Any]] = None,
     ) -> LoadResult:
         payload: Dict[str, Any] = {"input": input}
@@ -6696,6 +6760,10 @@ class AsyncPrismerClient:
             payload["search"] = search
         if processing:
             payload["processing"] = processing
+        if view or not (return_config or {}).get("format"):
+            payload["view"] = view or "navigate"
+        if budget:
+            payload["budget"] = budget
         if return_config:
             payload["return"] = return_config
         if ranking:

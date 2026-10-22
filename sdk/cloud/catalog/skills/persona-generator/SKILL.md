@@ -131,11 +131,11 @@ the cloud `/api/im/councils/plan` handler after you hand over the cast.
 
 - **Why cloud, not you (architectural, 04 §2.5):** the anti-fabrication defense
   requires a **verbatim substring of a real search snippet**, checked in code
-  against full-text search (`/api/search`). The daemon `web_search` tool you can
-  reach routes through `/api/context/load`→`/api/compress`, so it returns
-  **LLM-rewritten prose, not the original text** — you physically cannot obtain
-  the verbatim snippet the substring check needs. Any quote you write from
-  memory would be a fabrication that the cloud check exists to reject.
+  against the cloud's own full-text search (`/api/search`). That check runs on
+  results the cloud fetched itself; a quote handed over in the cast cannot be
+  told apart from one written from memory, so it is never accepted as evidence.
+  Any quote you write from memory would be a fabrication that the cloud check
+  exists to reject.
 - **What the cloud does with your cast:** for each candidate it searches
   `"<displayName> <topic terms>"` and requires the person's name + a topic term
   to co-occur **inside the same sentence** ("some results exist" / "snippet

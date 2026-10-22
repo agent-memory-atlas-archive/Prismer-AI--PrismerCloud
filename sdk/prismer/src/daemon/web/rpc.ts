@@ -148,6 +148,20 @@ const SEARCH_LIMIT_DEFAULT = 5;
 /** web_load batch ceiling — keep a single tool call bounded. */
 const LOAD_URLS_MAX = 5;
 
+/**
+ * Navigation budget for `items` requested documents/refs. Cloud Load splits maxTokens*3
+ * bytes (minus a ~1400-byte envelope) across the items and defers any item whose share is
+ * under 1200 bytes (src/lib/load-navigation.ts). A single item keeps the 2000-token page;
+ * batches and query discovery get at least 2400 bytes per item so each returns an outline
+ * or page instead of a deferral.
+ */
+export function navigationBudgetTokens(items: number): number {
+  const perItemBytes = 2400;
+  const envelopeBytes = 1400;
+  const wanted = Math.ceil((Math.max(1, items) * perItemBytes + envelopeBytes) / 3);
+  return Math.min(16000, Math.max(2000, wanted));
+}
+
 interface WebRpcContext {
   cloud?: CloudClient;
   env: Record<string, string>;
@@ -260,6 +274,8 @@ async function handleWebSearch(ctx: WebRpcContext, body: unknown, res: ServerRes
   const resp = await ctx.cloud.request<Record<string, unknown>>('POST', '/api/context/load', {
     body: {
       input: query,
+      view: 'navigate',
+      budget: { maxTokens: navigationBudgetTokens(limit) },
       inputType: 'query',
       search: { topK: limit },
       processing: { maxConcurrent: 5 },
@@ -329,7 +345,15 @@ async function handleWebSearch(ctx: WebRpcContext, body: unknown, res: ServerRes
  * local-first 只接管 http(s) 读取（chromium 串行：pod 内单浏览器）。
  */
 async function handleWebLoad(ctx: WebRpcContext, body: unknown, res: ServerResponse): Promise<boolean> {
-  const b = (body ?? {}) as { url?: unknown; urls?: unknown };
+  const b = (body ?? {}) as { url?: unknown; urls?: unknown; input?: unknown };
+  // A string that carries Load refs, or nothing but URLs/refs in some wrapping, is read and never
+  // searched: models wrap refs (JSON-encoded, backticks, one comma-separated string), and the
+  // search fallback answered those with unrelated outlines and no error. Arrays never search.
+  if (typeof b.input === 'string') b.input = loadTargets(b.input) ?? b.input;
+  else if (Array.isArray(b.input))
+    b.input = b.input.flatMap((item: unknown) => (typeof item === 'string' ? (loadTargets(item) ?? item) : item));
+  if (typeof b.input === 'string' && !/^(https?|prismer):\/\//i.test(b.input.trim())) return handleWebSearch(ctx, {query:b.input}, res);
+  if (b.input !== undefined) { if(Array.isArray(b.input)) b.urls=b.input; else b.url=b.input; }
   const rawUrls: unknown[] = Array.isArray(b.urls) ? b.urls : b.url !== undefined ? [b.url] : [];
   const urls = rawUrls.filter((u): u is string => typeof u === 'string').map((u) => u.trim()).filter(Boolean);
   if (urls.length === 0) {
@@ -399,7 +423,7 @@ async function handleWebLoad(ctx: WebRpcContext, body: unknown, res: ServerRespo
   }
   const input: string | string[] = urls.length === 1 ? urls[0]! : urls;
   const resp = await ctx.cloud.request<Record<string, unknown>>('POST', '/api/context/load', {
-    body: { input },
+    body: { input, ...(urls.every(url => /^https?:\/\//i.test(url) || url.startsWith('prismer://load/')) ? {view:'navigate',budget:{maxTokens:navigationBudgetTokens(urls.length)}} : {}) },
     timeoutMs: loadApiTimeoutMs(),
     headers: forwardedProtoHeader(ctx.cloud),
   });
@@ -627,6 +651,16 @@ const TEXT_FIELDS = ['hqcc', 'raw', 'text', 'content', 'snippet'] as const;
 export function boundLoadApiPayload(payload: unknown): Record<string, unknown> {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return {};
   const out: Record<string, unknown> = { ...(payload as Record<string, unknown>) };
+  if (out.mode === 'navigate') {
+    // Cloud has already paginated the complete response. Slicing here would
+    // skip source bytes when the agent follows the original nextRef.
+    if (Buffer.byteLength(JSON.stringify(out)) > 60_000) return {mode:'navigate',error:'navigation_budget_exceeded',guidance:'Retry a smaller batch.'};
+    if (Array.isArray(out.next_calls)) out.next_calls=out.next_calls.map((call: any)=>({tool:'web_load',arguments:{input:(call.input || []).map((ref:string)=>{
+      if(call.view==='content' && ref.startsWith('prismer://load/')) {const uri=new URL(ref);uri.searchParams.set('view','content');return uri.toString();}return ref;
+    })}}));
+    return out;
+  }
+
   if (out.result && typeof out.result === 'object' && !Array.isArray(out.result)) {
     out.result = boundEntry(out.result as Record<string, unknown>);
   }
@@ -651,6 +685,33 @@ function boundEntry(entry: Record<string, unknown>): Record<string, unknown> {
 }
 
 // ─── small helpers (mirrors memory/rpc.ts) ───────────────────────────────────
+
+const LOAD_REF = /prismer:\/\/load\/[0-9a-f]{64}\/[A-Za-z0-9]+(?:\?[A-Za-z0-9=&_-]*)?/g;
+
+/**
+ * The URLs/refs a model-written `input` string stands for, or undefined for a plain query. It is
+ * either nothing but URLs/refs in some wrapping (JSON-encoded, quoted, backticked, bracketed,
+ * comma- or newline-separated), or text carrying Load refs — a ref only comes from a previous
+ * load, so a string with one is never a search query.
+ */
+export function loadTargets(value: string): string | string[] | undefined {
+  let text = value.trim();
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (typeof parsed === 'string') text = parsed;
+    else if (Array.isArray(parsed) && parsed.every((item) => typeof item === 'string')) text = parsed.join('\n');
+  } catch {
+    // Not JSON: use the text as written.
+  }
+  const tokens = text
+    .split(/[\s,;]+/)
+    .map((token) => token.replace(/^["'`<(\[]+|["'`>)\].,;]+$/g, ''))
+    .filter(Boolean);
+  const listed = tokens.length > 0 && tokens.every((token) => /^(https?|prismer):\/\/\S+$/i.test(token));
+  const targets = listed ? tokens : (text.match(LOAD_REF) ?? []);
+  if (targets.length === 0) return undefined;
+  return targets.length === 1 ? targets[0] : targets;
+}
 
 function mintTraceId(): string {
   return `web-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;

@@ -10,7 +10,8 @@ metadata:
 # Evidence Citations
 
 Use for research, comparisons, reports, and factual document generation.
-Retrieve through the available ingest/browser tools; a URL alone is not evidence.
+Retrieve through the available ingest/browser tools; a URL or a Load outline alone is not
+evidence — quote from the section text you actually read.
 Read the actual source and distinguish its claims from your inference.
 
 Resolve `scripts/sources.py` relative to this installed skill directory.

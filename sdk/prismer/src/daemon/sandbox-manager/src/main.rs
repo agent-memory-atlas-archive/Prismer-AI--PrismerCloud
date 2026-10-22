@@ -76,7 +76,11 @@ fn main() {
     let daemon_home = init::resolve_daemon_home_dir();
     let config_path = daemon_home.join(".prismer").join("config.toml");
     let template_mode = init::runtime_template_mode();
-    let restoring_template = init::has_template_marker(&daemon_home) && !template_mode;
+    let restoring_template = init::restoring_template(
+        init::has_template_marker(&daemon_home),
+        template_mode,
+        env::var("PRISMER_DAEMON_ID").ok().as_deref(),
+    );
     let daemon_id = init::resolve_daemon_id_for_boot(&config_path, !restoring_template);
     let cloud_base = init::resolve_cloud_base();
     let api_key = init::resolve_api_key();

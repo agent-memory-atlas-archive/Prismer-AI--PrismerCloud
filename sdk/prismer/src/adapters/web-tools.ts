@@ -33,8 +33,10 @@ export interface WebSearchInput {
 }
 
 export interface WebSearchOutput {
+  guidance?: string;
+  next_calls?: unknown[];
   ok: boolean;
-  mode?: 'query';
+  mode?: 'query' | 'navigate';
   /** Ranked results; `hqcc` is the compressed page content (bounded). */
   results?: Array<{
     rank?: number;
@@ -51,6 +53,8 @@ export interface WebSearchOutput {
 }
 
 export interface WebLoadInput {
+  /** Search query, URL/ref, or ref batch; follow nextRef using this same tool. */
+  input?: string | string[];
   /**
    * Single URI — http(s) web page OR a workspace `prismer://` URI
    * (memory203/20 §2.2 / 19 B9: `prismer://<owner>/asset/<sha>`,
@@ -64,8 +68,10 @@ export interface WebLoadInput {
 }
 
 export interface WebLoadOutput {
+  guidance?: string;
+  next_calls?: unknown[];
   ok: boolean;
-  mode?: 'single_url' | 'batch_urls' | 'prismer_uri';
+  mode?: 'single_url' | 'batch_urls' | 'prismer_uri' | 'navigate';
   /** Single-URL mode result. */
   result?: { url: string; title?: string | null; hqcc?: string | null; hqccTruncated?: boolean; cached?: boolean };
   /** Batch mode results. */

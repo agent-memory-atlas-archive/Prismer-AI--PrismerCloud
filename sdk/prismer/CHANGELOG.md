@@ -1,5 +1,36 @@
 # Changelog — @prismer/runtime
 
+## Unreleased
+
+- Hermes web tools teach Load navigation: `workspace_web_search` no longer claims to return
+  compressed page content (it returns outlines with refs), `web_load` states that an outline is
+  not evidence, and the per-dispatch tool-routing directive tells the agent to read sections by
+  ref, follow `nextRef` only while needed and answer from the returned `content`.
+- The Hermes timeline shows what `web_load` read: navigation calls pass `input` (URL, query, ref
+  or a batch) and legacy batches pass `urls`, which the tool-detail mapper ignored, so the
+  fetch row had no target.
+- `web_load` never searches a string that carries Load refs or consists only of URLs/refs, however the
+  model wrapped them (JSON-encoded array or string, quotes, backticks, angle brackets, several refs in one
+  comma- or newline-separated string); array input never searches either. Observed live with Hermes +
+  DeepSeek: a ref batch sent as a JSON string did not start with a URL scheme, so it was searched and the
+  agent got unrelated outlines with no error instead of the section it chose.
+
+## 2.2.71 (2026-10-20)
+
+- `web_load` navigation budget now scales with the number of requested items. Query discovery
+  (topK 5) and ref batches of 4–5 used a fixed 2000-token budget, which left each item under
+  the Cloud per-item floor, so every result came back `deferred: BUDGET_EXHAUSTED` with no
+  outline. Single refs keep the 2000-token page; batches get at least 2400 bytes per item.
+
+## 2.2.70 (2026-10-20)
+
+- Load navigation: default agent/SDK calls return cached document outlines; the same
+  tool accepts section refs and batches, with bounded original-text pages and
+  executable next calls. Explicit legacy formats remain available. Runtime forwards
+  navigation without truncation; offline snapshot navigation is not yet supported.
+
+- sandbox-manager: the dev credential fallback (`PRISMER_ALLOW_FAKE_API_KEY=true`) no longer wears the cloud-minted shape `sk-prismer-live-*`. The daemon classifies keyless containers by that prefix, so the fake key made every keyless carrier authenticate instead of waiting for the credential-less ACS handshake — the cloud refused it, `/healthz.declareBlocked` stayed `AUTH_PENDING` forever, and every EaaS checkpoint restore died in `waitDaemon` (`provider_timeout`, observed live 2026-10-15). Image-only change; the npm package contents are unchanged.
+
 ## 2.2.67 (2026-10-11)
 
 - POSIX Pi shell supervisors retain ownership of background descendants after commands complete. Cleanup failures propagate as infrastructure failures instead of a canceled acknowledgement; Windows remains on the upstream executor.

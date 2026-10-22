@@ -12,18 +12,20 @@ export function register(parent: Command, _getIMClient: ClientFactory, getAPICli
   ctx
     .command('load <urls...>')
     .description('Load one or more URLs into context')
-    .option('-f, --format <fmt>', 'output format: hqcc, raw, or both', 'hqcc')
+    .option('-f, --format <fmt>', 'legacy output format: hqcc, raw, or both')
+    .option('--view <view>', 'navigate, outline, or content', 'navigate')
+    .option('--max-tokens <n>', 'total navigation budget', '4000')
     .option('--json', 'output raw JSON response')
-    .action(async (urls: string[], opts: { format: string; json: boolean }) => {
+    .action(async (urls: string[], opts: { format?: string; view: string; maxTokens: string; json: boolean }) => {
       const client = getAPIClient();
       try {
         const input = urls.length === 1 ? urls[0] : urls;
         const format = opts.format as 'hqcc' | 'raw' | 'both';
         const res = await client.load(input, {
-          return: { format },
+          ...(format ? { return: { format } } : { view: opts.view as 'navigate'|'outline'|'content', budget: {maxTokens:Number(opts.maxTokens)} }),
         });
 
-        if (opts.json) {
+        if (opts.json || res.mode === 'navigate') {
           process.stdout.write(JSON.stringify(res, null, 2) + '\n');
           return;
         }
@@ -69,7 +71,7 @@ export function register(parent: Command, _getIMClient: ClientFactory, getAPICli
         const topK = parseInt(opts.topK, 10);
         const res = await client.search(query, { topK });
 
-        if (opts.json) {
+        if (opts.json || res.mode === 'navigate') {
           process.stdout.write(JSON.stringify(res, null, 2) + '\n');
           return;
         }

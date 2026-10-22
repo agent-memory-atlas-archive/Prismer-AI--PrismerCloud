@@ -59,6 +59,37 @@ Follow the [EaaS cookbook](../../../docs/cookbook/eaas-sdk-integration.md) for d
 
 Python `environments.list_events()` is JSON replay, not an SSE/WS subscriber. HITL callers must poll for the matching question message after the run reaches `awaiting_input`. The [2026-10-09 real ACS feature acceptance](../../../docs/organization/specs/10-eaas-critical-feature-regression-20261009.md) used the installed TypeScript SDK; Python/CLI full business parity was not rerun.
 
+### Resume a managed environment
+
+This helper is included in the **2.2.71 release line**. PyPI publication, installed-package validation and deployed provider acceptance are separate release gates; check release receipts before relying on a published version or provider behavior.
+
+```python
+import os
+from prismer import PrismerClient
+
+client = PrismerClient(
+    api_key=os.environ["PRISMER_API_KEY"],
+    base_url=os.environ["PRISMER_BASE_URL"],
+)
+environment_id = os.environ["PRISMER_ENVIRONMENT_ID"]
+# Persist and reuse this key when retrying the same intended resume operation.
+resumed = client.environments.resume(
+    environment_id, idempotency_key=os.environ["PRISMER_RESUME_KEY"]
+)
+if not resumed["success"]:
+    raise RuntimeError(resumed["error"])
+ready = client.environments.wait_until_ready(environment_id, capability="sandbox")
+print(ready["environmentId"], ready.get("lifecycle"))
+```
+
+With `AsyncPrismerClient`, await both `environments.resume(...)` and `environments.wait_until_ready(...)`; the same keyword arguments apply.
+
+`resume` reads the current projection, wakes a paused environment, or restores a stopped managed environment using only its authoritative `lifecycle.latestSnapshotId` when `recoverable` is true. A live retention window and retained checkpoint are required; the server rechecks them during restore admission. Legacy stopped/errored environments and unavailable checkpoints return a `state_conflict` envelope with `details.reason = checkpoint_unavailable`. Running, degraded and provisioning environments return their current ID/state/revision/epoch with `operationId: None`. Admission does not establish provider readiness. GET and delegated write failures propagate unchanged, including request ID, details and Retry-After hints. No write is retried automatically.
+
+`EnvironmentStatus.lifecycle` is optional for old responses; the public `EnvironmentLifecycleStatus` and `EnvironmentLifecycleFailure` models preserve lease/retention deadlines, recoverability, authoritative snapshot and the complete last failure. Use `model_dump(by_alias=True, exclude_unset=True)` to round-trip omitted fields and wire names. `PoolPolicyStatus.constraints` optionally contains public `ProjectPoolConstraints` / `ProjectPoolConstraint` models for the shared ceiling and each granted pool's mode, ceiling, enablement, allowed miss behavior and compatible fallback IDs in the same `configRevision`. Absent constraints do not authorize editing; maxReady alone proves neither a keep-ready target nor actual warm inventory.
+
+Managed Phase A saves/reclaims/restores under server policy. Explicit/automatic lease renewal remains Phase B; this helper creates no keepalive or local renewal timer.
+
 ## Quick Start
 
 ### Sync Client

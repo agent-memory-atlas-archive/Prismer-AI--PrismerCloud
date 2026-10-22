@@ -64,8 +64,18 @@ class RankingInfo(BaseModel):
 
 
 class LoadResultItem(BaseModel):
+    status: Optional[str] = None
+    ref: Optional[str] = None
+    next_ref: Optional[str] = Field(default=None, alias="nextRef")
+    content_ref: Optional[str] = Field(default=None, alias="contentRef")
+    outline_ref: Optional[str] = Field(default=None, alias="outlineRef")
+    content: Optional[str] = None
+    content_complete: Optional[bool] = Field(default=None, alias="contentComplete")
+    outline_complete: Optional[bool] = Field(default=None, alias="outlineComplete")
+    outline: Optional[List[Dict[str, Any]]] = None
+    source: Optional[Dict[str, Any]] = None
     rank: Optional[int] = None
-    url: str
+    url: Optional[str] = None
     title: Optional[str] = None
     hqcc: Optional[str] = None
     raw: Optional[str] = None
@@ -73,7 +83,7 @@ class LoadResultItem(BaseModel):
     cached_at: Optional[str] = Field(default=None, alias="cachedAt")
     processed: Optional[bool] = None
     found: Optional[bool] = None
-    error: Optional[str] = None
+    error: Optional[Union[str, Dict[str, Any]]] = None
     ranking: Optional[RankingInfo] = None
     meta: Optional[Dict[str, Any]] = None
 
@@ -82,15 +92,21 @@ class LoadResultItem(BaseModel):
 
 
 class LoadResult(BaseModel):
+    guidance: Optional[str] = None
+    next_calls: Optional[List[Dict[str, Any]]] = None
+    usage: Optional[Dict[str, Any]] = None
+    budget: Optional[Dict[str, Any]] = None
     success: bool
     request_id: Optional[str] = Field(default=None, alias="requestId")
-    mode: Optional[Literal["single_url", "batch_urls", "query"]] = None
+    mode: Optional[Literal["single_url", "batch_urls", "query", "navigate"]] = None
     result: Optional[LoadResultItem] = None
     results: Optional[List[LoadResultItem]] = None
     summary: Optional[Dict[str, Any]] = None
     cost: Optional[Dict[str, Any]] = None
     processing_time: Optional[int] = Field(default=None, alias="processingTime")
     error: Optional[PrismerError] = None
+
+    warnings: Optional[List[Dict[str, str]]] = None
 
     class Config:
         populate_by_name = True
@@ -1031,6 +1047,30 @@ class EnvironmentCreateSpec(BaseModel):
         populate_by_name = True
 
 
+class EnvironmentLifecycleFailure(BaseModel):
+    """Last managed failure and optional durable operation provenance."""
+    code: str
+    message: str
+    at: str
+    operation_id: Optional[str] = Field(default=None, alias="operationId")
+    attempt: Optional[int] = None
+    terminal: Optional[bool] = None
+
+    model_config = {"populate_by_name": True}
+
+
+class EnvironmentLifecycleStatus(BaseModel):
+    """Server-authoritative managed retention and checkpoint projection."""
+    mode: Literal["managed"]
+    lease_expires_at: Optional[str] = Field(alias="leaseExpiresAt")
+    retention_expires_at: Optional[str] = Field(alias="retentionExpiresAt")
+    recoverable: bool
+    latest_snapshot_id: Optional[str] = Field(alias="latestSnapshotId")
+    last_failure: Optional[EnvironmentLifecycleFailure] = Field(alias="lastFailure")
+
+    model_config = {"populate_by_name": True}
+
+
 class EnvironmentStatus(BaseModel):
     """环境状态投影（API 草案逐字；Global Constraint 14 状态机）。"""
 
@@ -1058,6 +1098,7 @@ class EnvironmentStatus(BaseModel):
     storage_policy_revision: Optional[str] = Field(default=None, alias="storagePolicyRevision")
     expires_at: str = Field(alias="expiresAt")
     milestones: List[EaasMilestone] = Field(default_factory=list)
+    lifecycle: Optional[EnvironmentLifecycleStatus] = None
 
     class Config:
         populate_by_name = True
@@ -1578,12 +1619,32 @@ class ProjectPoolManagement(BaseModel):
         populate_by_name = True
 
 
+class ProjectPoolConstraint(BaseModel):
+    """Authorized limits for one granted pool in the response config revision."""
+    pool_id: str = Field(alias="poolId")
+    mode: Literal["cold", "warm", "provider-managed"]
+    max_ready: int = Field(alias="maxReady")
+    can_enable: bool = Field(alias="canEnable")
+    allowed_on_miss: List[Literal["cold", "reject"]] = Field(alias="allowedOnMiss")
+    fallback_pool_ids: List[str] = Field(alias="fallbackPoolIds")
+
+    model_config = {"populate_by_name": True}
+
+
+class ProjectPoolConstraints(BaseModel):
+    max_ready: int = Field(alias="maxReady")
+    pools: List[ProjectPoolConstraint]
+
+    model_config = {"populate_by_name": True}
+
+
 class PoolPolicyStatus(BaseModel):
     revision: int
     observed_revision: int = Field(alias="observedRevision")
     config_revision: str = Field(alias="configRevision")
     allowed_pool_ids: List[str] = Field(alias="allowedPoolIds")
     policy: ProjectPoolManagement
+    constraints: Optional[ProjectPoolConstraints] = None
 
     class Config:
         populate_by_name = True

@@ -3622,6 +3622,33 @@ export class EnvironmentsClient {
     return this._r('GET', `/api/v1/environments/${encodeURIComponent(id)}`);
   }
 
+  /**
+   * Resume the same environment using its current authoritative projection.
+   * Admission is not readiness: call waitUntilReady after a successful result.
+   * Managed restore requires a live retained checkpoint; never selects from snapshot history.
+   */
+  async resume(id: string, opts?: EaasIdempotencyOptions): Promise<EaasApiEnvelope<EaasLifecycleResult>> {
+    const current = await this.get(id);
+    if (!current.success) return current;
+    const { environmentId, state, revision, epoch, lifecycle } = current.data;
+    if (state === 'paused') return this.wake(id, opts);
+    if (state === 'stopped' && lifecycle?.mode === 'managed' && lifecycle.recoverable === true && lifecycle.latestSnapshotId) {
+      return this.restore(id, lifecycle.latestSnapshotId, opts);
+    }
+    if (state === 'running' || state === 'degraded' || state === 'provisioning') {
+      return { success: true, data: { environmentId, state, revision, epoch, operationId: null }, requestId: current.requestId };
+    }
+    return {
+      success: false,
+      error: {
+        code: 'state_conflict',
+        message: `resume: environment is ${state} without a recoverable checkpoint`,
+        details: { reason: 'checkpoint_unavailable', environmentId, state },
+      },
+      requestId: current.requestId,
+    };
+  }
+
   async list(options?: { cursor?: string; limit?: number }): Promise<EaasApiEnvelope<EnvironmentListPage>> {
     const query: Record<string, string> = {};
     if (options?.cursor !== undefined) query.cursor = options.cursor;
@@ -5673,6 +5700,8 @@ export class PrismerClient {
   async load(input: string | string[], options: LoadOptions = {}): Promise<LoadResult> {
     return this._request('POST', '/api/context/load', {
       input,
+      view: options.view ?? (options.return?.format ? undefined : 'navigate'),
+      budget: options.budget,
       inputType: options.inputType,
       processUncached: options.processUncached,
       search: options.search,

@@ -75,7 +75,7 @@ def test_public_clients_and_status_models():
         client = getattr(module, name)(api_key="sk-eaas-synthetic", base_url="https://test.invalid")
         assert callable(client.pool_policy.patch)
         assert callable(client.project_pools.list)
-    assert getattr(types, "PoolPolicyStatus").model_validate(STATUS).model_dump(by_alias=True) == STATUS
+    assert getattr(types, "PoolPolicyStatus").model_validate(STATUS).model_dump(by_alias=True, exclude_unset=True) == STATUS
 
 
 def test_inventory_model_roundtrip_preserves_unknown_and_terminal_cursor():

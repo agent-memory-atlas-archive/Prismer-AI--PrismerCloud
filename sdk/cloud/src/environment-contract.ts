@@ -186,6 +186,27 @@ export interface EaasContextProjection {
   };
 }
 
+/** Last managed lifecycle failure, including durable operation provenance when available. */
+export interface EnvironmentLifecycleFailure {
+  code: string;
+  message: string;
+  at: string;
+  operationId?: string;
+  attempt?: number;
+  terminal?: boolean;
+}
+
+/** Managed lifecycle projection mirrored from src/tenant/contract.ts. */
+export interface EnvironmentLifecycleStatus {
+  mode: 'managed';
+  leaseExpiresAt: string | null;
+  retentionExpiresAt: string | null;
+  /** Server authority: stopped with a live retention window and a snapshot. */
+  recoverable: boolean;
+  latestSnapshotId: string | null;
+  lastFailure: EnvironmentLifecycleFailure | null;
+}
+
 /** 环境状态投影（API 草案逐字；Global Constraint 14 状态机）。 */
 export interface EnvironmentStatus {
   environmentId: string;
@@ -201,6 +222,8 @@ export interface EnvironmentStatus {
   storagePolicyRevision?: string;
   expiresAt: string;
   milestones: Array<{ name: string; at: string; durationMs?: number }>;
+  /** Absent on legacy environments and older servers. */
+  lifecycle?: EnvironmentLifecycleStatus;
 }
 
 /** One preference in the project's full-replacement multi-pool policy. */
@@ -230,12 +253,29 @@ export interface ProjectPoolManagement {
   pools: PoolPreference[];
 }
 
+/** Authorized edit limits for one granted pool in this config revision. */
+export interface ProjectPoolConstraint {
+  poolId: string;
+  mode: 'cold' | 'warm' | 'provider-managed';
+  maxReady: number;
+  canEnable: boolean;
+  allowedOnMiss: Array<'cold' | 'reject'>;
+  fallbackPoolIds: string[];
+}
+
+export interface ProjectPoolConstraints {
+  maxReady: number;
+  pools: ProjectPoolConstraint[];
+}
+
 export interface PoolPolicyStatus {
   revision: number;
   observedRevision: number;
   configRevision: string;
   allowedPoolIds: string[];
   policy: ProjectPoolManagement;
+  /** Same configRevision as this policy response; omission is not permission to edit. */
+  constraints?: ProjectPoolConstraints;
 }
 
 export interface ProjectPoolStatus {

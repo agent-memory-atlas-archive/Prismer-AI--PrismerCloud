@@ -39,8 +39,8 @@ carrier instructions for inline answers. Abstract retrieval is not full-paper re
 |--------|---------|
 | Search papers | `curl "https://export.arxiv.org/api/query?search_query=all:QUERY&max_results=5"` |
 | Get specific paper | `curl "https://export.arxiv.org/api/query?id_list=2402.03300"` |
-| Read abstract (web) | `web_extract(urls=["https://arxiv.org/abs/2402.03300"])` |
-| Read full paper (PDF) | `web_extract(urls=["https://arxiv.org/pdf/2402.03300"])` |
+| Read abstract (web) | `web_load(input="https://arxiv.org/abs/2402.03300")` |
+| Read full paper (PDF) | `web_load(input="https://arxiv.org/pdf/2402.03300")`, then `web_load(input=["<section ref>", ...])` |
 
 ## Searching Papers
 
@@ -127,14 +127,18 @@ After finding a paper, read it:
 
 ```
 # Abstract page (fast, metadata + abstract)
-web_extract(urls=["https://arxiv.org/abs/2402.03300"])
+web_load(input="https://arxiv.org/abs/2402.03300")
 
-# Full paper (PDF → markdown via Firecrawl)
-web_extract(urls=["https://arxiv.org/pdf/2402.03300"])
+# Full paper: the first call returns the outline with refs, then read the sections you need
+web_load(input="https://arxiv.org/pdf/2402.03300")
+web_load(input=["<ref of the method section>", "<ref of the results section>"])
 ```
 
-For local PDF processing, see `office-artifacts`. Use an available extraction
-tool; these examples do not imply a Firecrawl account or full-text entitlement.
+An outline is not the paper's text — quote only from returned `content`, and
+follow `nextRef` only while a section still matters. Runtimes without
+`web_load` use `cloud load <url>` / `cloud load '<ref>'` (see `ingest`). For
+local PDF processing, see `office-artifacts`. A failed or partial extraction is
+a coverage gap, not something to fill in from memory.
 
 ## Common Categories
 
@@ -226,8 +230,8 @@ curl --fail --silent --show-error --max-time 30 "https://api.semanticscholar.org
 
 1. **Discover**: `python3 "<skill-dir>/scripts/search_arxiv.py" "your topic" --sort date --max 10`
 2. **Assess impact**: `curl --fail --silent --show-error --max-time 30 "https://api.semanticscholar.org/graph/v1/paper/arXiv:ID?fields=citationCount,influentialCitationCount"`
-3. **Read abstract**: `web_extract(urls=["https://arxiv.org/abs/ID"])`
-4. **Read full paper**: `web_extract(urls=["https://arxiv.org/pdf/ID"])`
+3. **Read abstract**: `web_load(input="https://arxiv.org/abs/ID")`
+4. **Read full paper**: `web_load(input="https://arxiv.org/pdf/ID")`, then pass the refs of the sections you need back to `web_load`
 5. **Find related work**: `curl --fail --silent --show-error --max-time 30 "https://api.semanticscholar.org/graph/v1/paper/arXiv:ID/references?fields=title,citationCount&limit=20"`
 6. **Get recommendations**: POST to Semantic Scholar recommendations endpoint
 7. **Track authors**: `curl --fail --silent --show-error --max-time 30 "https://api.semanticscholar.org/graph/v1/author/search?query=NAME"`
